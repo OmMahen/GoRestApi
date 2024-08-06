@@ -18,7 +18,9 @@ func AddMovie(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println(err.Error())
 	}
-	db.MovieList = append(db.MovieList, movie)
+
+	query := `INSERT INTO movies (id, title, category, year, imdb_rating) VALUES ($1, $2, $3, $4, $5)`
+	db.DB.Exec(query, movie.Id, movie.Title, movie.Category, movie.Year, movie.ImdbRating)
 
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
@@ -27,39 +29,60 @@ func AddMovie(w http.ResponseWriter, r *http.Request) {
 func GetAllMovies(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
-	allMovies := db.MovieList
-	json.NewEncoder(w).Encode(allMovies)
+
+	rows, _ := db.DB.Query("SELECT id, title, category, year, imdb_rating FROM movies")
+
+	var movies []models.Movie
+	for rows.Next() {
+		var movie models.Movie
+		rows.Scan(&movie.Id, &movie.Title, &movie.Category, &movie.Year, &movie.ImdbRating)
+		movies = append(movies, movie)
+	}
+
+	json.NewEncoder(w).Encode(movies)
 }
 
 func GetMovieById(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	id := mux.Vars(r)["id"]
 
-	for _, movie := range db.MovieList {
+	var movie models.Movie
+	err := db.DB.QueryRow("SELECT * FROM movies WHERE id=$1", id).Scan(
+		&movie.Id,
+		&movie.Title,
+		&movie.Category,
+		&movie.Year,
+		&movie.ImdbRating,
+	)
 
-		if id == movie.Id {
-
-			json.NewEncoder(w).Encode(movie)
-			return
-		}
+	if err != nil {
+		message := models.Message{Message: "Movie Not found"}
+		json.NewEncoder(w).Encode(message)
 	}
-	message := models.Message{Message: "Movie Not found"}
-	json.NewEncoder(w).Encode(message)
+
+	json.NewEncoder(w).Encode(movie)
 }
 
 func DeleteMovieById(w http.ResponseWriter, r *http.Request) {
-
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	id := mux.Vars(r)["id"]
-
-	for index, movie := range db.MovieList {
-		if id == movie.Id {
-			db.MovieList = append(db.MovieList[:index], db.MovieList[index+1:]...)
-			break
-		}
+	result, err := db.DB.Exec("DELETE FROM movies WHERE id=$1", id)
+	if err != nil {
+		message := models.Message{Message: "Error deleting movie"}
+		json.NewEncoder(w).Encode(message)
 	}
-	json.NewEncoder(w).Encode(db.MovieList)
-
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		message := models.Message{Message: "Error retrieving delete result"}
+		json.NewEncoder(w).Encode(message)
+	}
+	if rowsAffected == 0 {
+		message := models.Message{Message: "Movie not found"}
+		json.NewEncoder(w).Encode(message)
+	} else {
+		message := models.Message{Message: "Movie successfully deleted"}
+		json.NewEncoder(w).Encode(message)
+	}
 }
 
 func UpdateMovie(w http.ResponseWriter, r *http.Request) {
@@ -69,21 +92,28 @@ func UpdateMovie(w http.ResponseWriter, r *http.Request) {
 
 	json.NewDecoder(r.Body).Decode(&movie)
 
-	found := false
-	for index, movieToUpdate := range db.MovieList {
+	query := `
+		UPDATE movies
+		SET title = $1, category = $2, year = $3, imdb_rating = $4
+		WHERE id = $5
+	`
 
-		if movieToUpdate.Id == movie.Id {
+	result, err := db.DB.Exec(query, movie.Title, movie.Category, movie.Year, movie.ImdbRating, movie.Id)
 
-			db.MovieList[index] = movie
-			message := models.Message{Message: "Movie updated successfully"}
-			json.NewEncoder(w).Encode(message)
-			found = true
-			break
-		}
-	}
-	if !found {
-		message := models.Message{Message: "Movie Not found"}
+	if err != nil {
+		message := models.Message{Message: "Error updating movie"}
 		json.NewEncoder(w).Encode(message)
 	}
-
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		message := models.Message{Message: "Error retrieving update result"}
+		json.NewEncoder(w).Encode(message)
+	}
+	if rowsAffected == 0 {
+		message := models.Message{Message: "Movie not found"}
+		json.NewEncoder(w).Encode(message)
+	} else {
+		message := models.Message{Message: "Movie updated successfully"}
+		json.NewEncoder(w).Encode(message)
+	}
 }
