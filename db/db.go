@@ -6,13 +6,28 @@ import (
 	"log"
 
 	_ "github.com/lib/pq"
+
+	"github.com/joho/godotenv"
+
+	"os"
 )
 
 var DB *sql.DB
 
 func Init() {
 	var err error
-	connStr := "postgresql://OmMahen:Ik7g1UWtOYlC@ep-sweet-glitter-836224.ap-southeast-1.aws.neon.tech/lostandfound_db?sslmode=require"
+
+	err = godotenv.Load()
+	if err != nil {
+		log.Fatalf("Error loading .env file")
+	}
+
+	connStr := os.Getenv("DATABASE_CONNECTION_STRING")
+	if connStr == "" {
+		log.Fatalf("API_KEY environment variable is not set")
+		return
+	}
+
 	DB, err = sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal(err)
